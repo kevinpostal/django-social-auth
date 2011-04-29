@@ -26,6 +26,7 @@ class LinkedinBackend(OAuthBackend):
     def get_user_details(self, response):
         """Return user details from Linkedin account"""
         return {
+            USERNAME: '%s-%s' % (response['first-name'],response['last-name']),
             'first_name': response['first-name'],
             'last_name': response['last-name'],
             'email': '',  # not supplied
