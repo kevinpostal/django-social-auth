@@ -66,7 +66,7 @@ User = UserSocialAuth._meta.get_field('user').rel.to
 # username field max length
 USERNAME_MAX_LENGTH = User._meta.get_field(USERNAME).max_length
 # uuid hex characters to keep while generating unique usernames
-UUID_MAX_LENGTH = 16
+UUID_MAX_LENGTH = 2
 
 # a few settings values
 def _setting(name, default=None):
@@ -194,7 +194,7 @@ class SocialAuthBackend(ModelBackend):
                 # increasing an index.
                 if len(username) + UUID_MAX_LENGTH > USERNAME_MAX_LENGTH:
                     username = username[:USERNAME_MAX_LENGTH - UUID_MAX_LENGTH]
-                name = username + uuid4().get_hex()[:UUID_MAX_LENGTH]
+                name = username + '_' + uuid4().get_hex()[:UUID_MAX_LENGTH]
 
         return final_username
 
