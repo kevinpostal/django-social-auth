@@ -65,8 +65,6 @@ USERNAME = 'username'
 User = UserSocialAuth._meta.get_field('user').rel.to
 # username field max length
 USERNAME_MAX_LENGTH = User._meta.get_field(USERNAME).max_length
-# uuid hex characters to keep while generating unique usernames
-UUID_MAX_LENGTH = 2
 
 # a few settings values
 def _setting(name, default=None):
@@ -105,9 +103,7 @@ class SocialAuthBackend(ModelBackend):
         uid = self.get_user_id(details, response)
         is_new = False
         try:
-            social_user = UserSocialAuth.objects.select_related('user')\
-                                                .get(provider=self.name,
-                                                     uid=uid)
+            social_user = self.get_social_auth_user(uid)
         except UserSocialAuth.DoesNotExist:
             user = kwargs.get('user')
             if user is None:  # new user
@@ -138,7 +134,7 @@ class SocialAuthBackend(ModelBackend):
             # would imply update user references on other apps, that's too
             # much intrusive
             if 'user' in kwargs and kwargs['user'] != social_user.user:
-                raise ValueError('Account already in use.')
+                raise ValueError('Account already in use.', social_user)
             user = social_user.user
 
         # Update user account data.
@@ -151,6 +147,7 @@ class SocialAuthBackend(ModelBackend):
                 social_user.extra_data = extra_data
                 social_user.save()
 
+        user.social_user = social_user
         return user
 
     def username(self, details):
@@ -192,9 +189,10 @@ class SocialAuthBackend(ModelBackend):
                 # breaking the field max_length value, this reduces the
                 # uniqueness, but it's less likely to happen repetitions than
                 # increasing an index.
-                if len(username) + UUID_MAX_LENGTH > USERNAME_MAX_LENGTH:
-                    username = username[:USERNAME_MAX_LENGTH - UUID_MAX_LENGTH]
-                name = username + '_' + uuid4().get_hex()[:UUID_MAX_LENGTH]
+                uuid_length = getattr(settings, 'SOCIAL_AUTH_UUID_LENGTH', 16)
+                if len(username) + uuid_length > USERNAME_MAX_LENGTH:
+                    username = username[:USERNAME_MAX_LENGTH - uuid_length]
+                name = username + uuid4().get_hex()[:uuid_length]
 
         return final_username
 
@@ -246,6 +244,15 @@ class SocialAuthBackend(ModelBackend):
         if changed:
             user.save()
 
+    def get_social_auth_user(self, uid):
+        """Return social auth user instance for given uid for current
+        backend.
+
+        Riase DoesNotExist exception if no entry.
+        """
+        return UserSocialAuth.objects.select_related('user')\
+                                     .get(provider=self.name, uid=uid)
+
     def get_user_id(self, details, response):
         """Must return a unique ID from values returned on details"""
         raise NotImplementedError('Implement in subclass')
@@ -292,7 +299,7 @@ class OAuthBackend(SocialAuthBackend):
         extra_data field"""
         data = {'access_token': response.get('access_token', '')}
         name = self.name.replace('-', '_').upper()
-        names = self.EXTRA_DATA or [] + _setting(name + '_EXTRA_DATA', [])
+        names = (self.EXTRA_DATA or []) + _setting(name + '_EXTRA_DATA', [])
         data.update((alias, response.get(name)) for name, alias in names)
         return data
 
@@ -300,6 +307,15 @@ class OAuthBackend(SocialAuthBackend):
 class OpenIDBackend(SocialAuthBackend):
     """Generic OpenID authentication backend"""
     name = 'openid'
+
+    def get_social_auth_user(self, uid):
+        """Return social auth user instance for given uid. OpenId uses
+        identity_url to identify the user in a unique way and that value
+        identifies the provider too.
+
+        Riase DoesNotExist exception if no entry.
+        """
+        return UserSocialAuth.objects.select_related('user').get(uid=uid)
 
     def get_user_id(self, details, response):
         """Return user unique id provided by service"""

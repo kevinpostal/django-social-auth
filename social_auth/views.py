@@ -13,6 +13,8 @@ from social_auth.utils import sanitize_redirect
 
 DEFAULT_REDIRECT = getattr(settings, 'SOCIAL_AUTH_LOGIN_REDIRECT_URL', '') or \
                    getattr(settings, 'LOGIN_REDIRECT_URL', '')
+SOCIAL_AUTH_LAST_LOGIN = getattr(settings, 'SOCIAL_AUTH_LAST_LOGIN',
+                                 'social_auth_last_login_backend')
 
 
 def auth(request, backend):
@@ -47,12 +49,18 @@ def complete_process(request, backend):
         login(request, user)
         if getattr(settings, 'SOCIAL_AUTH_SESSION_EXPIRATION', True):
             # Set session expiration date if present and not disabled by
-            # setting
-            backend_name = backend.AUTH_BACKEND.name
-            social_user = user.social_auth.get(provider=backend_name)
+            # setting. Use last social-auth instance for current provider,
+            # users can associate several accounts with a same provider.
+            #
+            # user.social_user is the used UserSocialAuth instance defined
+            # in authenticate process
+            social_user = user.social_user
             if social_user.expiration_delta():
                 request.session.set_expiry(social_user.expiration_delta())
         url = request.session.pop(REDIRECT_FIELD_NAME, '') or DEFAULT_REDIRECT
+
+        # store last login backend name in session
+        request.session[SOCIAL_AUTH_LAST_LOGIN] = social_user.provider
     else:
         url = getattr(settings, 'LOGIN_ERROR_URL', settings.LOGIN_URL)
     return HttpResponseRedirect(url)
