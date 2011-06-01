@@ -7,7 +7,7 @@ from cgi import parse_qs
 from xml.etree import ElementTree
 from xml.parsers.expat import ExpatError
 
-from social_auth.backends import ConsumerBasedOAuth, OAuthBackend
+from social_auth.backends import ConsumerBasedOAuth, OAuthBackend, USERNAME
 
 
 LINKEDIN_SERVER = 'linkedin.com'
